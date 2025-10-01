@@ -1,5 +1,5 @@
-import { ChatService } from "../service/chatService"
-import { Context } from "koa"
+import { ChatService } from "../service/chatService.ts"
+import type { Context } from "koa"
 import { z } from "zod"
 
 const chatRequestSchema = z.object({
@@ -7,7 +7,10 @@ const chatRequestSchema = z.object({
 })
 
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  private readonly chatService: ChatService
+  constructor(chatService: ChatService) {
+    this.chatService = chatService
+  }
 
   async chat(ctx: Context) {
     const parsedBody = chatRequestSchema.safeParse(ctx.request.body)

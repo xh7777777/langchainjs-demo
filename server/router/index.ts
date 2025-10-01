@@ -1,6 +1,6 @@
 import Router from 'koa-router'
-import { ChatController } from '../controller/chatController.js'
-import { ChatService } from '../service/chatService.js'
+import { ChatController } from '../controller/chatController.ts'
+import { ChatService } from '../service/chatService.ts'
 
 const chatService = new ChatService()
 const chatController = new ChatController(chatService)

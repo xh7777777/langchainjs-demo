@@ -1,4 +1,4 @@
-import { makeResponse } from "../agent/langchain.js"
+import { makeResponse } from "../agent/langchain.ts"
 
 export class ChatService {
   async chat(message: string): Promise<string> {
