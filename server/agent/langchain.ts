@@ -5,12 +5,12 @@ dotenv.config();
 
 // 初始化大模型
 const llm = new ChatDeepSeek({
-  model: "deepseek-reasoner",
+  model: "deepseek-chat",
   temperature: 0.7,
 });
 
 // 构建template
-const prompt = ChatPromptTemplate.fromTemplate('You are a assistant for a chatbot. You are given a message and you need to respond to it.')
+const prompt = ChatPromptTemplate.fromTemplate('You are a assistant for a chatbot. You are given a message and you need to respond to it. Here is the message: "{message}". Please respond to the message in a friendly and helpful manner.');
 
 // 创建chain
 const chain = prompt.pipe(llm)
