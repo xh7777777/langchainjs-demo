@@ -21,3 +21,9 @@ export async function makeResponse(message: string) {
     message: message
   })
 }
+
+export async function streamResponse(message: string) {
+  return await chain.stream({
+    message: message
+  })
+}

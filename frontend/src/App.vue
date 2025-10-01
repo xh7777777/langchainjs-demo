@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import MarkdownIt from 'markdown-it'
-import { sendMessage } from './api'
+import type { RenderRule } from 'markdown-it/lib/renderer'
+import { sendMessage, streamMessage } from './api'
 
 type ChatRole = 'user' | 'ai'
 
@@ -24,22 +25,32 @@ const userInput = ref('')
 const isResponding = ref(false)
 const chatBoxRef = ref<HTMLDivElement | null>(null)
 const DEFAULT_ERROR_MESSAGE = '抱歉，暂时无法连接到服务，请稍后重试。'
+const useStream = ref(true)
 const markdown = new MarkdownIt({
   html: false,
   linkify: true,
   breaks: true
 })
 
-markdown.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+const defaultLinkRule = markdown.renderer.rules.link_open as RenderRule | undefined
+
+const linkOpenRule: RenderRule = (tokens, idx, options, env, self) => {
   const token = tokens[idx]
   token.attrSet('target', '_blank')
   token.attrSet('rel', 'noopener noreferrer')
+  if (defaultLinkRule) {
+    return defaultLinkRule(tokens, idx, options, env, self)
+  }
   return self.renderToken(tokens, idx, options)
 }
+
+markdown.renderer.rules.link_open = linkOpenRule
 
 const renderMarkdown = (input: string) => markdown.render(input)
 
 const canSend = computed(() => userInput.value.trim().length > 0 && !isResponding.value)
+const showTypingIndicator = computed(() => isResponding.value && !useStream.value)
+const streamAbortController = ref<AbortController | null>(null)
 
 const formatTimestamp = (value: Date) =>
   new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit' }).format(value)
@@ -65,9 +76,24 @@ const handleSend = async () => {
   isResponding.value = true
   scrollToBottom()
 
+  if (useStream.value) {
+    await streamReply(trimmed)
+  } else {
+    await fetchReply(trimmed)
+  }
+}
+
+const handleKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault()
+    handleSend()
+  }
+}
+
+const fetchReply = async (prompt: string) => {
   try {
-    const response = await sendMessage(trimmed)
-    const reply = typeof response === 'string' ? response : response?.message ?? DEFAULT_ERROR_MESSAGE
+    const response = await sendMessage(prompt)
+    const reply = typeof response === 'string' ? response : response?.reply ?? DEFAULT_ERROR_MESSAGE
 
     messages.value.push({
       id: Date.now(),
@@ -89,10 +115,48 @@ const handleSend = async () => {
   }
 }
 
-const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Enter' && !event.shiftKey) {
-    event.preventDefault()
-    handleSend()
+const streamReply = async (prompt: string) => {
+  const assistantMessage: ChatMessage = {
+    id: Date.now(),
+    role: 'ai',
+    content: '',
+    createdAt: new Date()
+  }
+  messages.value.push(assistantMessage)
+  scrollToBottom()
+
+  try {
+    streamAbortController.value?.abort()
+    const controller = new AbortController()
+    streamAbortController.value = controller
+
+    await streamMessage(prompt, {
+      onChunk(content) {
+        assistantMessage.content += content
+        scrollToBottom()
+      },
+      onError(error) {
+        console.error('Stream error', error)
+        assistantMessage.content = DEFAULT_ERROR_MESSAGE
+      },
+      onComplete() {
+        assistantMessage.createdAt = new Date()
+      },
+      signal: controller.signal
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return
+    }
+    console.error('Failed to stream AI response', error)
+    assistantMessage.content = DEFAULT_ERROR_MESSAGE
+  } finally {
+    if (!streamAbortController.value?.signal.aborted) {
+      streamAbortController.value?.abort()
+    }
+    streamAbortController.value = null
+    isResponding.value = false
+    scrollToBottom()
   }
 }
 </script>
@@ -101,7 +165,7 @@ const handleKeydown = (event: KeyboardEvent) => {
   <div class="page">
     <header class="header">
       <h1>AI 聊天</h1>
-      <p>消息将通过后台 API 返回</p>
+      <p>支持非流式与流式两种模式切换</p>
     </header>
     <main class="chat-card">
       <div ref="chatBoxRef" class="messages">
@@ -116,7 +180,7 @@ const handleKeydown = (event: KeyboardEvent) => {
           </div>
           <span class="timestamp">{{ formatTimestamp(message.createdAt) }}</span>
         </div>
-        <div v-if="isResponding" class="message ai thinking">
+        <div v-if="showTypingIndicator" class="message ai thinking">
           <div class="bubble">
             <span class="dot" aria-hidden="true"></span>
             <span class="dot" aria-hidden="true"></span>
@@ -126,6 +190,10 @@ const handleKeydown = (event: KeyboardEvent) => {
         </div>
       </div>
       <form class="composer" @submit.prevent="handleSend">
+        <label class="mode-toggle">
+          <input v-model="useStream" type="checkbox" />
+          <span>{{ useStream ? '流式模式' : '非流式模式' }}</span>
+        </label>
         <textarea
           v-model="userInput"
           placeholder="输入内容，按 Enter 发送，Shift+Enter 换行"
@@ -303,7 +371,9 @@ const handleKeydown = (event: KeyboardEvent) => {
 
 .composer {
   display: flex;
+  align-items: flex-end;
   gap: 12px;
+  flex-wrap: wrap;
   margin-top: 16px;
 }
 
@@ -365,4 +435,23 @@ const handleKeydown = (event: KeyboardEvent) => {
     max-width: 86%;
   }
 }
+
+.mode-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  min-width: 82px;
+  user-select: none;
+  cursor: pointer;
+}
+
+.mode-toggle input {
+  width: 48px;
+  height: 24px;
+  accent-color: #636cff;
+  cursor: pointer;
+}
 </style>
+

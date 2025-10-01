@@ -9,6 +9,8 @@ const chatRouter = new Router({ prefix: '/chat' })
 
 chatRouter.post('/', chatController.chat.bind(chatController))
 
+chatRouter.post('/stream', chatController.stream.bind(chatController))
+
 const router = new Router()
 router.use(chatRouter.routes()).use(chatRouter.allowedMethods())
 
