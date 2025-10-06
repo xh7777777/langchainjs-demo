@@ -1,5 +1,9 @@
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
+import { createStuffDocumentsChain } from "langchain/chains/combine_documents";
+import { docs } from "./retrieval.ts";
+import { ChatOpenAI } from "@langchain/openai";
+
 import * as dotenv from "dotenv";
 dotenv.config();
 
@@ -10,20 +14,30 @@ const llm = new ChatDeepSeek({
 });
 
 // 构建template
-const prompt = ChatPromptTemplate.fromTemplate('You are a assistant for a chatbot. You are given a message and you need to respond to it. Here is the message: "{message}". Please respond to the message in a friendly and helpful manner.');
+const prompt = ChatPromptTemplate.fromTemplate(`
+  Answer the user's question.
+  Context: {context}.
+  Question: {message}
+`);
 
 // 创建chain
-const chain = prompt.pipe(llm)
+const chain = await createStuffDocumentsChain({
+  llm,
+  prompt,
+});
 
 // 返回对话历史
 export async function makeResponse(message: string) {
+  console.log("makeResponse message:", docs);
   return await chain.invoke({
-    message: message
+    message: message,
+    context: docs
   })
 }
 
 export async function streamResponse(message: string) {
   return await chain.stream({
-    message: message
+    message: message,
+    context: "You are a helpful assistant."
   })
 }

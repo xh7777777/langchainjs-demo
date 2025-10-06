@@ -36,6 +36,7 @@ export class ChatService {
   }
 
   private normalizeContent(input: unknown): string {
+    console.log("normalizeContent input:", input)
     if (input == null) {
       return ""
     }
